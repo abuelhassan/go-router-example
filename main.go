@@ -14,11 +14,15 @@ import (
 	"github.com/abuelhassan/go-router-example/router"
 )
 
-var routes = []router.Route{
+var routes = []struct {
+	method  string
+	pattern string
+	handler http.HandlerFunc
+}{
 	{
-		Method:  http.MethodGet,
-		Pattern: "/health",
-		Handler: handler.HealthCheck,
+		method:  http.MethodGet,
+		pattern: "/health",
+		handler: handler.HealthCheck,
 	},
 }
 
@@ -31,7 +35,12 @@ func main() {
 	port := *flag.Uint("port", defaultPort, "server port")
 	flag.Parse()
 
-	rtr := router.New(routes, handler.NotFound)
+	rtr := router.New()
+	rtr.NotFound = handler.NotFound
+	for _, r := range routes {
+		rtr.Route(r.method, r.pattern, r.handler)
+	}
+
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%d", port),
 		Handler: rtr,
