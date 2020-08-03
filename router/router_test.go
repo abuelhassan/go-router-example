@@ -23,33 +23,34 @@ func TestServeHTTP(t *testing.T) {
 	t.Run("match", func(t *testing.T) {
 		w, r, isInvoked, h := setup(http.MethodGet, "/match")
 
-		routes := []Route{
-			{
-				Method:  http.MethodGet,
-				Pattern: "/match",
-				Handler: h,
-			},
-		}
-
-		rtr := New(routes, nil)
+		rtr := New()
+		rtr.Route(http.MethodGet, "/match", h)
 		rtr.ServeHTTP(w, r)
 
 		assert.True(t, *isInvoked)
 	})
 	t.Run("no match", func(t *testing.T) {
-		w, r, isInvoked, h := setup(http.MethodGet, "/match")
+		w, r, notFoundInvoked, h := setup(http.MethodGet, "/match")
+		handlerInvoked := false
 
-		routes := []Route{
-			{
-				Method:  http.MethodGet,
-				Pattern: "/health",
-				Handler: nil,
-			},
-		}
-
-		rtr := New(routes, h)
+		rtr := New()
+		rtr.Route(http.MethodGet, "/health", func(writer http.ResponseWriter, request *http.Request) {
+			handlerInvoked = true
+		})
+		rtr.NotFound = h
 		rtr.ServeHTTP(w, r)
 
-		assert.True(t, *isInvoked)
+		assert.False(t, handlerInvoked)
+		assert.True(t, *notFoundInvoked)
+	})
+	t.Run("default no match", func(t *testing.T) {
+		w, r, isInvoked, h := setup(http.MethodGet, "/match")
+
+		rtr := New()
+		rtr.Route(http.MethodGet, "/health", h)
+		rtr.ServeHTTP(w, r)
+
+		assert.False(t, *isInvoked)
+		assert.Equal(t, http.StatusNotFound, w.Result().StatusCode)
 	})
 }
