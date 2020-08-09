@@ -33,7 +33,12 @@ func TestHealthCheck(t *testing.T) {
 			HealthCheck(tt.args.w, tt.args.r)
 
 			res := tt.args.w.Result()
-			defer res.Body.Close()
+			defer func() {
+				err := res.Body.Close()
+				if err != nil {
+					t.Fatal("HealthCheck() couldn't close body")
+				}
+			}()
 
 			if res.StatusCode != tt.wantStatus {
 				t.Errorf("HealthCheck() statusCode = %d, wantStatusCode %d", res.StatusCode, tt.wantStatus)
@@ -76,7 +81,12 @@ func TestNotFound(t *testing.T) {
 			NotFound(tt.args.w, tt.args.r)
 
 			res := tt.args.w.Result()
-			defer res.Body.Close()
+			defer func() {
+				err := res.Body.Close()
+				if err != nil {
+					t.Fatal("NotFoundHandler() couldn't close body")
+				}
+			}()
 
 			if res.StatusCode != tt.wantStatus {
 				t.Errorf("NotFound() statusCode = %d, wantStatusCode %d", res.StatusCode, tt.wantStatus)
