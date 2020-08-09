@@ -15,14 +15,14 @@ import (
 )
 
 var routes = []struct {
-	method  string
-	pattern string
-	handler http.HandlerFunc
+	method      string
+	pattern     string
+	handlerFunc http.HandlerFunc
 }{
 	{
-		method:  http.MethodGet,
-		pattern: "/health",
-		handler: handler.HealthCheck,
+		method:      http.MethodGet,
+		pattern:     "/health",
+		handlerFunc: handler.HealthCheck,
 	},
 }
 
@@ -36,16 +36,15 @@ func main() {
 	flag.Parse()
 
 	rtr := router.New()
-	rtr.NotFound = handler.NotFound
+	rtr.NotFoundHandler = http.HandlerFunc(handler.NotFound)
 	for _, r := range routes {
-		rtr.Route(r.method, r.pattern, r.handler)
+		rtr.Route(r.method, r.pattern, r.handlerFunc)
 	}
 
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%d", port),
 		Handler: rtr,
 	}
-
 	go func() {
 		log.Printf("starting server at port :%d\n", port)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
