@@ -1,44 +1,69 @@
 package router
 
 import (
+	"errors"
 	"net/http"
 )
 
+var (
+	defaultNotFoundHandler = http.NotFound
+
+	handleNotFound      = notFound
+	matchRequestHandler = matchRequest
+
+	errNotFound = errors.New("not found")
+)
+
 type Router struct {
-	routes   []route
-	NotFound http.HandlerFunc
+	NotFoundHandler http.Handler
+	routes          []route
 }
 
 type route struct {
 	method  string
 	pattern string
-	handler http.HandlerFunc
+	handler http.Handler
 }
 
-func New() *Router {
-	return &Router{
-		routes:   []route{},
-		NotFound: http.NotFound,
+func New() Router {
+	return Router{
+		routes: []route{},
 	}
 }
 
 func (rtr Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	method := r.Method
-	path := r.URL.Path
-
-	var matching http.HandlerFunc
-	for _, route := range rtr.routes {
-		if method == route.method && path == route.pattern {
-			matching = route.handler
-			break
+	matching, err := matchRequestHandler(rtr.routes, r)
+	if err != nil {
+		switch err {
+		case errNotFound:
+			handleNotFound(rtr.NotFoundHandler, w, r)
 		}
-	}
-	if matching == nil {
-		matching = rtr.NotFound
+		return
 	}
 	matching.ServeHTTP(w, r)
 }
 
-func (rtr *Router) Route(method, pattern string, handlerFunc http.HandlerFunc) {
-	rtr.routes = append(rtr.routes, route{method, pattern, handlerFunc})
+func (rtr *Router) Route(method, pattern string, handler http.Handler) {
+	rtr.routes = append(rtr.routes, route{method, pattern, handler})
+}
+
+func matchRequest(routes []route, r *http.Request) (http.Handler, error) {
+	method := r.Method
+	path := r.URL.Path
+
+	for _, route := range routes {
+		if method == route.method && path == route.pattern {
+			return route.handler, nil
+		}
+	}
+
+	return nil, errNotFound
+}
+
+func notFound(h http.Handler, w http.ResponseWriter, r *http.Request) {
+	if h != nil {
+		h.ServeHTTP(w, r)
+		return
+	}
+	defaultNotFoundHandler(w, r)
 }
