@@ -5,29 +5,100 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-
-	"github.com/stretchr/testify/assert"
 )
 
 func TestHealthCheck(t *testing.T) {
-	t.Run("alive", func(t *testing.T) {
-		w := httptest.NewRecorder()
-		r := httptest.NewRequest(http.MethodGet, "/", nil)
-		HealthCheck(w, r)
+	type args struct {
+		w *httptest.ResponseRecorder
+		r *http.Request
+	}
+	tests := []struct {
+		name       string
+		args       args
+		wantStatus int
+		wantBody   string
+	}{
+		{
+			name: "route not found",
+			args: args{
+				w: httptest.NewRecorder(),
+				r: httptest.NewRequest(http.MethodGet, "/health", nil),
+			},
+			wantStatus: 200,
+			wantBody:   `{"alive":true}`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			HealthCheck(tt.args.w, tt.args.r)
 
-		actualResponse, err := ioutil.ReadAll(w.Result().Body)
-		assert.Nil(t, err)
-		assert.Equal(t, "{\"alive\":true}", string(actualResponse))
-		assert.Equal(t, http.StatusOK, w.Result().StatusCode)
-	})
+			res := tt.args.w.Result()
+			defer func() {
+				err := res.Body.Close()
+				if err != nil {
+					t.Fatal("HealthCheck() couldn't close body")
+				}
+			}()
+
+			if res.StatusCode != tt.wantStatus {
+				t.Errorf("HealthCheck() statusCode = %d, wantStatusCode %d", res.StatusCode, tt.wantStatus)
+			}
+
+			gotBody, err := ioutil.ReadAll(res.Body)
+			if err != nil {
+				t.Fatalf("HealthCheck() couldn't read body, wantBody %s", gotBody)
+			}
+			if string(gotBody) != tt.wantBody {
+				t.Errorf("HealthCheck() body = %s, wantBody %s", gotBody, tt.wantBody)
+			}
+		})
+	}
 }
 
 func TestNotFound(t *testing.T) {
-	t.Run("route not found", func(t *testing.T) {
-		w := httptest.NewRecorder()
-		r := httptest.NewRequest(http.MethodGet, "/", nil)
-		NotFound(w, r)
+	type args struct {
+		w *httptest.ResponseRecorder
+		r *http.Request
+	}
+	tests := []struct {
+		name       string
+		args       args
+		wantStatus int
+		wantBody   string
+	}{
+		{
+			name: "route not found",
+			args: args{
+				w: httptest.NewRecorder(),
+				r: httptest.NewRequest(http.MethodGet, "/", nil),
+			},
+			wantStatus: 404,
+			wantBody:   "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			NotFound(tt.args.w, tt.args.r)
 
-		assert.Equal(t, http.StatusNotFound, w.Result().StatusCode)
-	})
+			res := tt.args.w.Result()
+			defer func() {
+				err := res.Body.Close()
+				if err != nil {
+					t.Fatal("NotFoundHandler() couldn't close body")
+				}
+			}()
+
+			if res.StatusCode != tt.wantStatus {
+				t.Errorf("NotFound() statusCode = %d, wantStatusCode %d", res.StatusCode, tt.wantStatus)
+			}
+
+			gotBody, err := ioutil.ReadAll(res.Body)
+			if err != nil {
+				t.Fatalf("NotFound() couldn't read body, wantBody %s", gotBody)
+			}
+			if string(gotBody) != tt.wantBody {
+				t.Errorf("NotFound() body = %s, wantBody %s", gotBody, tt.wantBody)
+			}
+		})
+	}
 }
