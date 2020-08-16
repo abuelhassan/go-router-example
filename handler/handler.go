@@ -14,3 +14,7 @@ func HealthCheck(w http.ResponseWriter, _ *http.Request) {
 func NotFound(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusNotFound)
 }
+
+func MethodNotAllowed(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusMethodNotAllowed)
+}
