@@ -10,15 +10,27 @@ import (
 
 func TestRouter_ServeHTTP(t *testing.T) {
 	originalNotFound := defaultNotFoundHandler
+	originalMethodNotAllowed := defaultMethodNotAllowedHandler
+	originalMatchRouteFunc := matchRouteFunc
 	defer func() {
 		defaultNotFoundHandler = originalNotFound
+		defaultMethodNotAllowedHandler = originalMethodNotAllowed
+		matchRouteFunc = originalMatchRouteFunc
 	}()
+	defaultNotFoundHandler = func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte("default not found"))
+	}
+	defaultMethodNotAllowedHandler = func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		_, _ = w.Write([]byte("default method not allowed"))
+	}
 	type globals struct {
-		defaultNotFound http.HandlerFunc
+		matchRouteFunc func([]route, *http.Request) (route, error)
 	}
 	type fields struct {
-		NotFoundHandler http.Handler
-		routes          []route
+		NotFoundHandler         http.Handler
+		MethodNotAllowedHandler http.Handler
 	}
 	type args struct {
 		w *httptest.ResponseRecorder
@@ -33,113 +45,114 @@ func TestRouter_ServeHTTP(t *testing.T) {
 		wantBody   string
 	}{
 		{
-			name: "match pattern and method",
+			name: "match route",
 			globals: globals{
-				defaultNotFound: nil,
+				matchRouteFunc: func(routes []route, request *http.Request) (route, error) {
+					h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						w.WriteHeader(http.StatusOK)
+						_, _ = w.Write([]byte("match found"))
+					})
+					return route{method: http.MethodGet, pattern: "/match", handler: h}, nil
+				},
 			},
 			fields: fields{
-				NotFoundHandler: nil,
-				routes: []route{
-					{
-						method:  http.MethodGet,
-						pattern: "/mismatch",
-						handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-							w.WriteHeader(200)
-							_, _ = w.Write([]byte("mismatch"))
-						}),
-					},
-					{
-						method:  http.MethodPost,
-						pattern: "/match",
-						handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-							w.WriteHeader(200)
-							_, _ = w.Write([]byte("post match"))
-						}),
-					},
-					{
-						method:  http.MethodGet,
-						pattern: "/match",
-						handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-							w.WriteHeader(200)
-							_, _ = w.Write([]byte("get match"))
-						}),
-					},
-				},
+				NotFoundHandler:         nil,
+				MethodNotAllowedHandler: nil,
 			},
 			args: args{
 				w: httptest.NewRecorder(),
 				r: httptest.NewRequest(http.MethodGet, "/match", nil),
 			},
-			wantStatus: 200,
-			wantBody:   "get match",
+			wantStatus: http.StatusOK,
+			wantBody:   "match found",
 		},
 		{
-			name: "handler not found",
+			name: "not found",
 			globals: globals{
-				defaultNotFound: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					w.WriteHeader(404)
-					_, _ = w.Write([]byte("default handler not found"))
-				}),
+				matchRouteFunc: func(routes []route, request *http.Request) (route, error) {
+					return route{}, errNotFound
+				},
 			},
 			fields: fields{
 				NotFoundHandler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					w.WriteHeader(404)
-					_, _ = w.Write([]byte("handler not found"))
+					w.WriteHeader(http.StatusNotFound)
+					_, _ = w.Write([]byte("not found"))
 				}),
-				routes: []route{
-					{
-						method:  http.MethodGet,
-						pattern: "/match",
-						handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-							w.WriteHeader(200)
-							_, _ = w.Write([]byte("get mismatch"))
-						}),
-					},
-				},
+				MethodNotAllowedHandler: nil,
 			},
 			args: args{
 				w: httptest.NewRecorder(),
-				r: httptest.NewRequest(http.MethodGet, "/mismatch", nil),
+				r: httptest.NewRequest(http.MethodGet, "/", nil),
 			},
-			wantStatus: 404,
-			wantBody:   "handler not found",
+			wantStatus: http.StatusNotFound,
+			wantBody:   "not found",
 		},
 		{
-			name: "default handler not found",
+			name: "default not found",
 			globals: globals{
-				defaultNotFound: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					w.WriteHeader(404)
-					_, _ = w.Write([]byte("default handler not found"))
-				}),
+				matchRouteFunc: func(routes []route, request *http.Request) (route, error) {
+					return route{}, errNotFound
+				},
+			},
+			fields: fields{
+				NotFoundHandler:         nil,
+				MethodNotAllowedHandler: nil,
+			},
+			args: args{
+				w: httptest.NewRecorder(),
+				r: httptest.NewRequest(http.MethodGet, "/", nil),
+			},
+			wantStatus: http.StatusNotFound,
+			wantBody:   "default not found",
+		},
+		{
+			name: "method not allowed",
+			globals: globals{
+				matchRouteFunc: func(routes []route, request *http.Request) (route, error) {
+					return route{}, errMethodNotAllowed
+				},
 			},
 			fields: fields{
 				NotFoundHandler: nil,
-				routes: []route{
-					{
-						method:  http.MethodGet,
-						pattern: "/match",
-						handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-							w.WriteHeader(200)
-							_, _ = w.Write([]byte("get mismatch"))
-						}),
-					},
-				},
+				MethodNotAllowedHandler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.WriteHeader(http.StatusMethodNotAllowed)
+					_, _ = w.Write([]byte("method not allowed"))
+				}),
 			},
 			args: args{
 				w: httptest.NewRecorder(),
-				r: httptest.NewRequest(http.MethodGet, "/mismatch", nil),
+				r: httptest.NewRequest(http.MethodGet, "/", nil),
 			},
-			wantStatus: 404,
-			wantBody:   "default handler not found",
+			wantStatus: http.StatusMethodNotAllowed,
+			wantBody:   "method not allowed",
+		},
+		{
+			name: "default method not allowed",
+			globals: globals{
+				matchRouteFunc: func(routes []route, request *http.Request) (route, error) {
+					return route{}, errMethodNotAllowed
+				},
+			},
+			fields: fields{
+				NotFoundHandler:         nil,
+				MethodNotAllowedHandler: nil,
+			},
+			args: args{
+				w: httptest.NewRecorder(),
+				r: httptest.NewRequest(http.MethodGet, "/", nil),
+			},
+			wantStatus: http.StatusMethodNotAllowed,
+			wantBody:   "default method not allowed",
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			defaultNotFoundHandler = tt.globals.defaultNotFound
+			matchRouteFunc = tt.globals.matchRouteFunc
 			rtr := Router{
-				NotFoundHandler: tt.fields.NotFoundHandler,
-				routes:          tt.fields.routes,
+				NotFoundHandler:         tt.fields.NotFoundHandler,
+				MethodNotAllowedHandler: tt.fields.MethodNotAllowedHandler,
 			}
+
 			rtr.ServeHTTP(tt.args.w, tt.args.r)
 			got := tt.args.w.Result()
 			defer func() {
@@ -164,39 +177,25 @@ func TestRouter_ServeHTTP(t *testing.T) {
 	}
 }
 
-func TestRouter_matchRequest(t *testing.T) {
-	type fields struct {
-		routes []route
-	}
+func Test_matchRoute(t *testing.T) {
 	type args struct {
-		r *http.Request
+		routes []route
+		r      *http.Request
 	}
 	tests := []struct {
 		name    string
-		fields  fields
 		args    args
 		want    route
 		wantErr error
 	}{
 		{
 			name: "match method and pattern",
-			fields: fields{
-				routes: []route{
-					{
-						method:  http.MethodGet,
-						pattern: "/mismatch",
-					},
-					{
-						method:  http.MethodPost,
-						pattern: "/match",
-					},
-					{
-						method:  http.MethodGet,
-						pattern: "/match",
-					},
-				},
-			},
 			args: args{
+				routes: []route{
+					{method: http.MethodGet, pattern: "/"},
+					{method: http.MethodPost, pattern: "/match"},
+					{method: http.MethodGet, pattern: "/match"},
+				},
 				r: httptest.NewRequest(http.MethodGet, "/match", nil),
 			},
 			want: route{
@@ -206,20 +205,23 @@ func TestRouter_matchRequest(t *testing.T) {
 			wantErr: nil,
 		},
 		{
-			name: "no match",
-			fields: fields{
-				routes: []route{
-					{
-						method:  http.MethodGet,
-						pattern: "/mismatch",
-					},
-					{
-						method:  http.MethodPost,
-						pattern: "/match",
-					},
-				},
-			},
+			name: "method not allowed",
 			args: args{
+				routes: []route{
+					{method: http.MethodGet, pattern: "/mismatch"},
+					{method: http.MethodPost, pattern: "/match"},
+				},
+				r: httptest.NewRequest(http.MethodGet, "/match", nil),
+			},
+			want:    route{},
+			wantErr: errMethodNotAllowed,
+		},
+		{
+			name: "not found",
+			args: args{
+				routes: []route{
+					{method: http.MethodGet, pattern: "/mismatch"},
+				},
 				r: httptest.NewRequest(http.MethodGet, "/match", nil),
 			},
 			want:    route{},
@@ -228,16 +230,13 @@ func TestRouter_matchRequest(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rtr := &Router{
-				routes: tt.fields.routes,
-			}
-			got, err := rtr.matchRequest(tt.args.r)
+			got, err := matchRoute(tt.args.routes, tt.args.r)
 			if err != tt.wantErr {
-				t.Errorf("matchRequest() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("matchRoute() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("matchRequest() got = %v, want %v", got, tt.want)
+				t.Errorf("matchRoute() got = %v, want %v", got, tt.want)
 			}
 		})
 	}

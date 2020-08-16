@@ -6,14 +6,21 @@ import (
 )
 
 var (
-	defaultNotFoundHandler = http.NotFound
+	defaultNotFoundHandler         = http.HandlerFunc(http.NotFound)
+	defaultMethodNotAllowedHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	})
 
-	errNotFound = errors.New("not found")
+	matchRouteFunc = matchRoute
+
+	errNotFound         = errors.New("not found")
+	errMethodNotAllowed = errors.New("method not allowed")
 )
 
 type Router struct {
-	NotFoundHandler http.Handler
-	routes          []route
+	NotFoundHandler         http.Handler
+	MethodNotAllowedHandler http.Handler
+	routes                  []route
 }
 
 type route struct {
@@ -29,13 +36,19 @@ func New() Router {
 }
 
 func (rtr Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	matching, err := rtr.matchRequest(r)
+	matching, err := matchRouteFunc(rtr.routes, r)
 	if err != nil {
 		switch err {
 		case errNotFound:
 			h := rtr.NotFoundHandler
 			if h == nil {
-				h = http.HandlerFunc(defaultNotFoundHandler)
+				h = defaultNotFoundHandler
+			}
+			h.ServeHTTP(w, r)
+		case errMethodNotAllowed:
+			h := rtr.MethodNotAllowedHandler
+			if h == nil {
+				h = defaultMethodNotAllowedHandler
 			}
 			h.ServeHTTP(w, r)
 		}
@@ -48,15 +61,21 @@ func (rtr *Router) Route(method, pattern string, handler http.Handler) {
 	rtr.routes = append(rtr.routes, route{method, pattern, handler})
 }
 
-func (rtr *Router) matchRequest(r *http.Request) (route, error) {
+func matchRoute(routes []route, r *http.Request) (route, error) {
 	method := r.Method
 	path := r.URL.Path
 
-	for _, route := range rtr.routes {
+	methodNotAllowed := false
+	for _, route := range routes {
 		if method == route.method && path == route.pattern {
 			return route, nil
 		}
+		if path == route.pattern {
+			methodNotAllowed = true
+		}
 	}
-
+	if methodNotAllowed {
+		return route{}, errMethodNotAllowed
+	}
 	return route{}, errNotFound
 }
