@@ -28,7 +28,7 @@ func TestServiceHandlers(t *testing.T) {
 				w: httptest.NewRecorder(),
 				r: httptest.NewRequest(http.MethodGet, "/health", nil),
 			},
-			wantStatus: 200,
+			wantStatus: http.StatusOK,
 			wantBody:   `{"alive":true}`,
 		},
 		{
@@ -39,7 +39,7 @@ func TestServiceHandlers(t *testing.T) {
 				w: httptest.NewRecorder(),
 				r: httptest.NewRequest(http.MethodGet, "/", nil),
 			},
-			wantStatus: 404,
+			wantStatus: http.StatusNotFound,
 			wantBody:   "",
 		},
 		{
@@ -50,7 +50,7 @@ func TestServiceHandlers(t *testing.T) {
 				w: httptest.NewRecorder(),
 				r: httptest.NewRequest(http.MethodGet, "/", nil),
 			},
-			wantStatus: 405,
+			wantStatus: http.StatusMethodNotAllowed,
 			wantBody:   "",
 		},
 	}
