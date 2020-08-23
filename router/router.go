@@ -2,6 +2,7 @@ package router
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/abuelhassan/go-router-example/trie"
@@ -40,14 +41,14 @@ func New() Router {
 func (rtr Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h, err := matchRouteFunc(rtr.routes, r)
 	if err != nil {
-		switch err {
-		case errNotFound:
+		switch {
+		case errors.Is(err, errNotFound):
 			h := rtr.NotFoundHandler
 			if h == nil {
 				h = defaultNotFoundHandler
 			}
 			h.ServeHTTP(w, r)
-		case errMethodNotAllowed:
+		case errors.Is(err, errMethodNotAllowed):
 			h := rtr.MethodNotAllowedHandler
 			if h == nil {
 				h = defaultMethodNotAllowedHandler
@@ -81,8 +82,7 @@ func matchRoute(trie trie.Trier, r *http.Request) (http.Handler, error) {
 
 	mp, ok := v.(route)
 	if !ok || len(mp) == 0 {
-		// TODO: log error. maybe use wrapping!
-		return nil, errNotFound
+		return nil, fmt.Errorf("%w - conversion error", errNotFound)
 	}
 
 	if mp[method] == nil {

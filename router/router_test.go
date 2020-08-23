@@ -1,9 +1,11 @@
 package router
 
 import (
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 
 	"github.com/abuelhassan/go-router-example/trie"
@@ -70,7 +72,7 @@ func TestRouter_ServeHTTP(t *testing.T) {
 			name: "not found",
 			globals: globals{
 				matchRouteFunc: func(_ trie.Trier, request *http.Request) (http.Handler, error) {
-					return nil, errNotFound
+					return nil, fmt.Errorf("wrapped error: %w", errNotFound)
 				},
 			},
 			fields: fields{
@@ -91,7 +93,7 @@ func TestRouter_ServeHTTP(t *testing.T) {
 			name: "default not found",
 			globals: globals{
 				matchRouteFunc: func(_ trie.Trier, request *http.Request) (http.Handler, error) {
-					return nil, errNotFound
+					return nil, fmt.Errorf("wrapped error: %w", errNotFound)
 				},
 			},
 			fields: fields{
@@ -109,7 +111,7 @@ func TestRouter_ServeHTTP(t *testing.T) {
 			name: "method not allowed",
 			globals: globals{
 				matchRouteFunc: func(_ trie.Trier, request *http.Request) (http.Handler, error) {
-					return nil, errMethodNotAllowed
+					return nil, fmt.Errorf("wrapped error: %w", errMethodNotAllowed)
 				},
 			},
 			fields: fields{
@@ -130,7 +132,7 @@ func TestRouter_ServeHTTP(t *testing.T) {
 			name: "default method not allowed",
 			globals: globals{
 				matchRouteFunc: func(_ trie.Trier, request *http.Request) (http.Handler, error) {
-					return nil, errMethodNotAllowed
+					return nil, fmt.Errorf("wrapped error: %w", errMethodNotAllowed)
 				},
 			},
 			fields: fields{
@@ -205,7 +207,7 @@ func Test_matchRoute(t *testing.T) {
 				r:    httptest.NewRequest(http.MethodGet, "/", nil),
 			},
 			want:    nil,
-			wantErr: errNotFound,
+			wantErr: fmt.Errorf("%w - conversion error", errNotFound),
 		},
 		{
 			name: "method not allowed",
@@ -220,7 +222,7 @@ func Test_matchRoute(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := matchRoute(tt.args.trie, tt.args.r)
-			if err != tt.wantErr {
+			if !reflect.DeepEqual(err, tt.wantErr) {
 				t.Errorf("matchRoute() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
