@@ -60,7 +60,7 @@ func (t *PathTrie) Put(key string, value interface{}) {
 func nextPathSegment(p string, st int) (string, int) {
 	const sep = '/'
 
-	if st < 0 || st > len(p) {
+	if st < 0 || st >= len(p) {
 		return "", -1
 	}
 
