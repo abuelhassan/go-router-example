@@ -35,7 +35,7 @@ func (t *PathTrie) Get(key string) interface{} {
 }
 
 // Put
-// Receives key in a path format e.g. "/a/b/c" and value
+// Receives key in a path format e.g. "/a/b/c" and value.
 // Sets value to the given key.
 func (t *PathTrie) Put(key string, value interface{}) {
 	n := t
