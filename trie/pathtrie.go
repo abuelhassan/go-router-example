@@ -13,7 +13,7 @@ type PathTrie struct {
 	children map[string]*PathTrie
 }
 
-// NewPathTrie returns a new instance of PathTrie
+// NewPathTrie returns a new instance of PathTrie.
 func NewPathTrie() Trier {
 	return &PathTrie{}
 }
