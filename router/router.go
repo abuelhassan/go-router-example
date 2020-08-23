@@ -26,7 +26,7 @@ type (
 		routes                  trie.Trier
 	}
 
-	// route is map from method to handler
+	// route is a map from http.Method to http.Handler.
 	route map[string]http.Handler
 )
 
