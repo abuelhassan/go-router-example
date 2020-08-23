@@ -3,6 +3,8 @@ package router
 import (
 	"errors"
 	"net/http"
+
+	"github.com/abuelhassan/go-router-example/trie"
 )
 
 var (
@@ -17,26 +19,26 @@ var (
 	errMethodNotAllowed = errors.New("method not allowed")
 )
 
-type Router struct {
-	NotFoundHandler         http.Handler
-	MethodNotAllowedHandler http.Handler
-	routes                  []route
-}
+type (
+	Router struct {
+		NotFoundHandler         http.Handler
+		MethodNotAllowedHandler http.Handler
+		routes                  trie.Trier
+	}
 
-type route struct {
-	method  string
-	pattern string
-	handler http.Handler
-}
+	// route is map from method to handler
+	route map[string]http.Handler
+)
 
+// New returns an instance of Router
 func New() Router {
 	return Router{
-		routes: []route{},
+		routes: trie.NewPathTrie(),
 	}
 }
 
 func (rtr Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	matching, err := matchRouteFunc(rtr.routes, r)
+	h, err := matchRouteFunc(rtr.routes, r)
 	if err != nil {
 		switch err {
 		case errNotFound:
@@ -54,28 +56,38 @@ func (rtr Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	matching.handler.ServeHTTP(w, r)
+	h.ServeHTTP(w, r)
 }
 
+// Route adds a new route, or overrides it if it already exists.
 func (rtr *Router) Route(method, pattern string, handler http.Handler) {
-	rtr.routes = append(rtr.routes, route{method, pattern, handler})
+	val := route{}
+	r := rtr.routes.Get(pattern)
+	if r != nil {
+		val = r.(route)
+	}
+	val[method] = handler
+	rtr.routes.Put(pattern, val)
 }
 
-func matchRoute(routes []route, r *http.Request) (route, error) {
+func matchRoute(trie trie.Trier, r *http.Request) (http.Handler, error) {
 	method := r.Method
 	path := r.URL.Path
 
-	methodNotAllowed := false
-	for _, route := range routes {
-		if method == route.method && path == route.pattern {
-			return route, nil
-		}
-		if path == route.pattern {
-			methodNotAllowed = true
-		}
+	v := trie.Get(path)
+	if v == nil {
+		return nil, errNotFound
 	}
-	if methodNotAllowed {
-		return route{}, errMethodNotAllowed
+
+	mp, ok := v.(route)
+	if !ok || len(mp) == 0 {
+		// TODO: log error. maybe use wrapping!
+		return nil, errNotFound
 	}
-	return route{}, errNotFound
+
+	if mp[method] == nil {
+		return nil, errMethodNotAllowed
+	}
+
+	return mp[method], nil
 }
