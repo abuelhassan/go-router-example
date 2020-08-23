@@ -1,11 +1,14 @@
 package router
 
 import (
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
 	"testing"
+
+	"github.com/abuelhassan/go-router-example/trie"
 )
 
 func TestRouter_ServeHTTP(t *testing.T) {
@@ -26,7 +29,7 @@ func TestRouter_ServeHTTP(t *testing.T) {
 		_, _ = w.Write([]byte("default method not allowed"))
 	}
 	type globals struct {
-		matchRouteFunc func([]route, *http.Request) (route, error)
+		matchRouteFunc func(trie.Trier, *http.Request) (http.Handler, error)
 	}
 	type fields struct {
 		NotFoundHandler         http.Handler
@@ -47,12 +50,11 @@ func TestRouter_ServeHTTP(t *testing.T) {
 		{
 			name: "match route",
 			globals: globals{
-				matchRouteFunc: func(routes []route, request *http.Request) (route, error) {
-					h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				matchRouteFunc: func(_ trie.Trier, request *http.Request) (http.Handler, error) {
+					return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 						w.WriteHeader(http.StatusOK)
 						_, _ = w.Write([]byte("match found"))
-					})
-					return route{method: http.MethodGet, pattern: "/match", handler: h}, nil
+					}), nil
 				},
 			},
 			fields: fields{
@@ -69,8 +71,8 @@ func TestRouter_ServeHTTP(t *testing.T) {
 		{
 			name: "not found",
 			globals: globals{
-				matchRouteFunc: func(routes []route, request *http.Request) (route, error) {
-					return route{}, errNotFound
+				matchRouteFunc: func(_ trie.Trier, request *http.Request) (http.Handler, error) {
+					return nil, fmt.Errorf("wrapped error: %w", errNotFound)
 				},
 			},
 			fields: fields{
@@ -90,8 +92,8 @@ func TestRouter_ServeHTTP(t *testing.T) {
 		{
 			name: "default not found",
 			globals: globals{
-				matchRouteFunc: func(routes []route, request *http.Request) (route, error) {
-					return route{}, errNotFound
+				matchRouteFunc: func(_ trie.Trier, request *http.Request) (http.Handler, error) {
+					return nil, fmt.Errorf("wrapped error: %w", errNotFound)
 				},
 			},
 			fields: fields{
@@ -108,8 +110,8 @@ func TestRouter_ServeHTTP(t *testing.T) {
 		{
 			name: "method not allowed",
 			globals: globals{
-				matchRouteFunc: func(routes []route, request *http.Request) (route, error) {
-					return route{}, errMethodNotAllowed
+				matchRouteFunc: func(_ trie.Trier, request *http.Request) (http.Handler, error) {
+					return nil, fmt.Errorf("wrapped error: %w", errMethodNotAllowed)
 				},
 			},
 			fields: fields{
@@ -129,8 +131,8 @@ func TestRouter_ServeHTTP(t *testing.T) {
 		{
 			name: "default method not allowed",
 			globals: globals{
-				matchRouteFunc: func(routes []route, request *http.Request) (route, error) {
-					return route{}, errMethodNotAllowed
+				matchRouteFunc: func(_ trie.Trier, request *http.Request) (http.Handler, error) {
+					return nil, fmt.Errorf("wrapped error: %w", errMethodNotAllowed)
 				},
 			},
 			fields: fields{
@@ -178,64 +180,53 @@ func TestRouter_ServeHTTP(t *testing.T) {
 }
 
 func Test_matchRoute(t *testing.T) {
+	match := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
 	type args struct {
-		routes []route
-		r      *http.Request
+		trie trie.Trier
+		r    *http.Request
 	}
 	tests := []struct {
 		name    string
 		args    args
-		want    route
+		want    http.Handler
 		wantErr error
 	}{
 		{
-			name: "match method and pattern",
+			name: "match",
 			args: args{
-				routes: []route{
-					{method: http.MethodGet, pattern: "/"},
-					{method: http.MethodPost, pattern: "/match"},
-					{method: http.MethodGet, pattern: "/match"},
-				},
-				r: httptest.NewRequest(http.MethodGet, "/match", nil),
+				trie: mockTrier{get: route{http.MethodGet: match}},
+				r:    httptest.NewRequest(http.MethodGet, "/", nil),
 			},
-			want: route{
-				method:  http.MethodGet,
-				pattern: "/match",
-			},
+			want:    match,
 			wantErr: nil,
-		},
-		{
-			name: "method not allowed",
-			args: args{
-				routes: []route{
-					{method: http.MethodGet, pattern: "/mismatch"},
-					{method: http.MethodPost, pattern: "/match"},
-				},
-				r: httptest.NewRequest(http.MethodGet, "/match", nil),
-			},
-			want:    route{},
-			wantErr: errMethodNotAllowed,
 		},
 		{
 			name: "not found",
 			args: args{
-				routes: []route{
-					{method: http.MethodGet, pattern: "/mismatch"},
-				},
-				r: httptest.NewRequest(http.MethodGet, "/match", nil),
+				trie: mockTrier{get: nil},
+				r:    httptest.NewRequest(http.MethodGet, "/", nil),
 			},
-			want:    route{},
-			wantErr: errNotFound,
+			want:    nil,
+			wantErr: fmt.Errorf("%w - conversion error", errNotFound),
+		},
+		{
+			name: "method not allowed",
+			args: args{
+				trie: mockTrier{get: route{http.MethodGet: match}},
+				r:    httptest.NewRequest(http.MethodPost, "/", nil),
+			},
+			want:    nil,
+			wantErr: errMethodNotAllowed,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := matchRoute(tt.args.routes, tt.args.r)
-			if err != tt.wantErr {
+			got, err := matchRoute(tt.args.trie, tt.args.r)
+			if !reflect.DeepEqual(err, tt.wantErr) {
 				t.Errorf("matchRoute() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if !reflect.DeepEqual(got, tt.want) {
+			if (got == nil) != (tt.want == nil) {
 				t.Errorf("matchRoute() got = %v, want %v", got, tt.want)
 			}
 		})
