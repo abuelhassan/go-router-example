@@ -59,7 +59,7 @@ func (rtr Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.ServeHTTP(w, r)
 }
 
-// Route adds a new route, or overrides it if it already exists.
+// Route upserts a new route.
 func (rtr *Router) Route(method, pattern string, handler http.Handler) {
 	val := route{}
 	r := rtr.routes.Get(pattern)
