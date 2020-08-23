@@ -30,7 +30,7 @@ type (
 	route map[string]http.Handler
 )
 
-// New returns an instance of Router
+// New returns an instance of Router.
 func New() Router {
 	return Router{
 		routes: trie.NewPathTrie(),
