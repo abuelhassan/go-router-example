@@ -7,7 +7,7 @@ type Trier interface {
 }
 
 // PathTrie is an implementation of Trier.
-// A node's key is a path e.g. "/a/b/c"
+// A node's key is a path e.g. "/a/b/c".
 type PathTrie struct {
 	value    interface{}
 	children map[string]*PathTrie
